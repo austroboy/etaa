@@ -1,20 +1,26 @@
 """
 Job Post Poster Generator – HTML/CSS template rendered to JPG.
 
-Why HTML/CSS over Pillow:
-  * Pixel-perfect typography (real font kerning, line-breaks, gradients)
-  * Maintainable: the look is editable as one inline template instead
-    of dozens of draw.text() coordinates
-  * Easy to add: backgrounds, shadows, rounded corners, blend modes
+Theme: matches TalenTracker's branded recruitment poster style.
+  * Square 1080×1080 (Facebook / Instagram / LinkedIn safe)
+  * Top hero band with blue gradient overlay, "HIRING" letter-spaced
+    blue caps, massive black title, italic tagline
+  * Right-aligned brand mark in the hero corner
+  * 2x2 grid of sections —
+      Key Responsibilities | Requirements
+      Other Benefits        | Required Skills
+  * "Apply Now" cursive script (Google Fonts: Great Vibes)
+  * Centered QR code flanked by red Location / Deadline labels
+  * Bottom bar: blue gradient with logo right-aligned
 
-Why Playwright over wkhtmltoimage:
-  * Modern CSS support (Grid, Flexbox, gradients, shadows, mix-blend-mode)
-  * Reliable cross-platform install via `playwright install chromium`
-  * Same engine produces the same output everywhere
+Why HTML/CSS over Pillow: real typography, gradients, blur effects,
+easy to maintain via one inline template.
 
-Output: a 1080×1350 JPG (portrait, LinkedIn/Facebook-friendly) saved
-to outputs/job_posts/<slug>.jpg. Not sent to WhatsApp — the operator
-opens the file from disk and posts it manually.
+Why Playwright: pixel-perfect rendering with modern CSS, including
+Google-Fonts loading.
+
+Output: 1080×1080 JPG saved to outputs/job_posts/<slug>.jpg.
+No WhatsApp attachment — the operator downloads it manually.
 """
 
 import base64
@@ -34,80 +40,96 @@ logger = logging.getLogger("etaa")
 
 
 # ── Brand palette ──────────────────────────────────────────────────
-# All colors live here so they're trivial to retune to match a
-# different brand without touching the layout.
-COLOR_PRIMARY = "#1E40AF"   # deep brand blue
-COLOR_ACCENT  = "#3B82F6"   # lighter blue for accents
-COLOR_DARK    = "#0F172A"   # near-black for the title
-COLOR_MUTED   = "#475569"   # for taglines / labels
+COLOR_PRIMARY = "#1E40AF"   # deep brand blue (logo / underlines)
+COLOR_ACCENT  = "#3B82F6"   # lighter blue (hero gradient)
+COLOR_DEEP    = "#0B2C7F"   # darker blue for the bottom bar
+COLOR_BLACK   = "#0F172A"   # title color
+COLOR_BODY    = "#1F2937"   # body text
+COLOR_RED     = "#C53030"   # location / deadline red
 
-# Canvas
-W, H = 1080, 1350
+# Canvas — square format matches the brand template.
+W, H = 1080, 1080
 
 
-# ── Logo handling ──────────────────────────────────────────────────
-# The brand logo lives in assets/. If it has a JPEG-style flat
-# background (white or black), we run it through a one-time
-# transparency cleanup before embedding so it sits naturally on the
-# poster's gradient.
-def _logo_path() -> Optional[str]:
-    """Locate the brand logo file under settings.BASE_DIR/assets/."""
-    candidates = [
-        "talentracker_logo.png",
-        "talentracker_logo.jpg",
-        "logo.png",
-        "logo.jpg",
-    ]
+# ── Asset helpers ─────────────────────────────────────────────────
+def _project_root() -> Optional[str]:
     base = getattr(settings, "BASE_DIR", None)
-    if base is None:
+    return str(base) if base else None
+
+
+def _logo_path() -> Optional[str]:
+    root = _project_root()
+    if not root:
         return None
-    for name in candidates:
-        p = os.path.join(str(base), "assets", name)
+    for name in ("talentracker_logo.png", "talentracker_logo.jpg",
+                 "logo.png", "logo.jpg"):
+        p = os.path.join(root, "assets", name)
         if os.path.isfile(p):
             return p
     return None
 
 
+def _hero_bg_path() -> Optional[str]:
+    """Look for a user-provided hero/background image. If absent
+    the CSS falls back to a synthesised gradient backdrop, so no
+    download is required for the poster to work.
+    """
+    root = _project_root()
+    if not root:
+        return None
+    for name in ("conference_bg.jpg", "hero_bg.jpg", "hero.jpg",
+                 "conference_bg.png", "hero_bg.png"):
+        p = os.path.join(root, "assets", name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _file_to_data_uri(path: str, mime: str = "image/png") -> str:
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
 def _logo_data_uri() -> str:
-    """Return logo as a base64 data URI with background removed."""
     path = _logo_path()
     if not path:
         return ""
-    # Load + auto-remove flat background.
     img = Image.open(path).convert("RGBA")
     w, h = img.size
-    # Sample corners to detect bg color (assume corners are bg).
     corners = [img.getpixel((0, 0)), img.getpixel((w - 1, 0)),
                img.getpixel((0, h - 1)), img.getpixel((w - 1, h - 1))]
     avg_brightness = sum((r + g + b) / 3 for r, g, b, _ in corners) / 4
-
     pixels = img.load()
     if avg_brightness < 60:
-        # Dark background → kill near-black pixels.
         for y in range(h):
             for x in range(w):
                 r, g, b, a = pixels[x, y]
                 if (r + g + b) / 3 < 30:
                     pixels[x, y] = (255, 255, 255, 0)
     elif avg_brightness > 200:
-        # Light background → kill near-white pixels.
         for y in range(h):
             for x in range(w):
                 r, g, b, a = pixels[x, y]
                 if r > 235 and g > 235 and b > 235:
                     pixels[x, y] = (255, 255, 255, 0)
-    # Otherwise assume the file already has alpha; leave it alone.
 
-    # Encode to a memory buffer — avoid touching disk so we don't run
-    # into Windows file-locking issues (WinError 32) when the same
-    # process holds the handle.
     buf = io.BytesIO()
     img.save(buf, "PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{b64}"
 
 
-# ── QR code generator ─────────────────────────────────────────────
+def _hero_data_uri() -> str:
+    path = _hero_bg_path()
+    if not path:
+        return ""
+    ext = path.lower().rsplit(".", 1)[-1]
+    mime = "image/png" if ext == "png" else "image/jpeg"
+    return _file_to_data_uri(path, mime=mime)
+
+
+# ── QR code ───────────────────────────────────────────────────────
 def _qr_data_uri(target_url: str) -> str:
     qr = segno.make(target_url, error="m")
     buf = io.BytesIO()
@@ -121,17 +143,21 @@ def _whatsapp_apply_url(job_title: str, phone: str = "8801830225234") -> str:
     return f"https://wa.me/{phone}?text={quote(msg)}"
 
 
-# ── Bullet extraction (re-used from the old generator) ────────────
+# ── Bullet / section parsing ──────────────────────────────────────
 _HEADER_MARKERS = (
     "key requirements", "requirements", "responsibilities",
     "core responsibilities", "position overview", "key responsibilities",
     "qualifications", "preferred qualifications",
     "core responsibilities include", "key responsibilities include",
     "responsibilities include", "what you'll do", "candidate profile",
+    "key responsibilites",  # tolerate the typo found in some templates
+    "other benefits & facilities", "other benefits and facilities",
+    "required skills & competencies", "required skills and competencies",
+    "skills", "skills & competencies",
 )
 
 
-def _bullets_from_text(text: str, max_bullets: int = 6) -> List[str]:
+def _bullets_from_text(text: str, max_bullets: int = 5) -> List[str]:
     if not text:
         return []
     out = []
@@ -158,225 +184,301 @@ def _build_html(
     job_title: str,
     tagline: str,
     company_name: str,
-    what_you_do: List[str],
-    candidate_profile: List[str],
-    salary: str,
+    responsibilities: List[str],
+    requirements: List[str],
+    benefits: List[str],
+    skills: List[str],
     location: str,
     deadline: str,
-    contact_email: str,
-    contact_whatsapp: str,
     qr_uri: str,
     logo_uri: str,
+    hero_uri: str,
 ) -> str:
-    # Escape any user-provided strings that get interpolated into HTML.
     e = html.escape
-    do_li     = "".join(f"<li>{e(x)}</li>" for x in what_you_do)
-    profile_li = "".join(f"<li>{e(x)}</li>" for x in candidate_profile)
+
+    def li_block(items: List[str]) -> str:
+        if not items:
+            return "<li class='placeholder'>—</li>"
+        return "".join(f"<li>{e(it)}</li>" for it in items)
+
+    if hero_uri:
+        hero_bg = (
+            f"background-image: "
+            f"linear-gradient(180deg, rgba(255,255,255,0.45) 0%, "
+            f"rgba(240,248,255,0.65) 70%, rgba(240,248,255,0.95) 100%), "
+            f"url('{hero_uri}'); "
+            f"background-size: cover; background-position: center;"
+        )
+    else:
+        # Synthesised "blurred crowd" backdrop using layered radial
+        # gradients. Reads as soft silhouettes when blurred and
+        # tinted blue.
+        hero_bg = (
+            "background-image: "
+            "radial-gradient(ellipse 280px 180px at 18% 70%, rgba(30,64,175,0.18) 0%, transparent 70%), "
+            "radial-gradient(ellipse 260px 170px at 30% 60%, rgba(30,64,175,0.22) 0%, transparent 70%), "
+            "radial-gradient(ellipse 320px 200px at 50% 75%, rgba(30,64,175,0.28) 0%, transparent 70%), "
+            "radial-gradient(ellipse 250px 160px at 72% 65%, rgba(30,64,175,0.20) 0%, transparent 70%), "
+            "radial-gradient(ellipse 280px 180px at 85% 70%, rgba(30,64,175,0.18) 0%, transparent 70%), "
+            "radial-gradient(circle at 90% 10%, rgba(59,130,246,0.20) 0%, transparent 50%), "
+            "linear-gradient(180deg, #cfe0f5 0%, #e8f1fb 50%, #ffffff 100%);"
+        )
+
+    logo_top_html = (
+        f"<img class='logo-top' src='{logo_uri}' alt='{e(company_name)}'>"
+        if logo_uri
+        else f"<div class='logo-top-text'>{e(company_name)}</div>"
+    )
+    logo_bottom_html = (
+        f"<img class='logo-bottom' src='{logo_uri}' alt='{e(company_name)}'>"
+        if logo_uri
+        else f"<div class='logo-bottom-text'>{e(company_name)}</div>"
+    )
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Roboto:wght@400;500;700;900&family=Roboto+Slab:wght@700;900&display=swap" rel="stylesheet">
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
     width: {W}px; height: {H}px;
-    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: {COLOR_DARK};
-    background:
-      radial-gradient(circle at 90% 10%, rgba(59,130,246,0.18) 0%, transparent 50%),
-      radial-gradient(circle at 10% 90%, rgba(30,64,175,0.12) 0%, transparent 50%),
-      linear-gradient(180deg, #f0f7ff 0%, #ffffff 60%);
-    padding: 60px 70px;
+    font-family: "Roboto", -apple-system, "Segoe UI", sans-serif;
+    color: {COLOR_BODY};
+    background: #ffffff;
     overflow: hidden;
     position: relative;
   }}
-  .hiring-pill {{
-    display: inline-block;
-    background: {COLOR_PRIMARY};
-    color: white;
-    padding: 8px 24px;
-    border-radius: 999px;
-    font-size: 20px;
+
+  /* ── Hero band ── */
+  .hero {{
+    position: relative;
+    width: 100%;
+    height: 420px;
+    {hero_bg}
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 80px 30px;
+    text-align: center;
+    overflow: hidden;
+  }}
+  .hero::before {{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(30,64,175,0.18) 0%, transparent 18%, transparent 82%, rgba(30,64,175,0.18) 100%);
+    pointer-events: none;
+  }}
+  .logo-top {{
+    position: absolute;
+    top: 22px;
+    right: 28px;
+    height: 56px;
+    z-index: 5;
+  }}
+  .logo-top-text {{
+    position: absolute;
+    top: 22px;
+    right: 28px;
+    font-weight: 900;
+    color: {COLOR_PRIMARY};
+    font-size: 18px;
+    z-index: 5;
+  }}
+  .hiring {{
+    font-size: 22px;
     font-weight: 700;
-    letter-spacing: 6px;
+    color: {COLOR_PRIMARY};
+    letter-spacing: 12px;
     text-transform: uppercase;
+    margin-bottom: 10px;
+    z-index: 2;
   }}
   h1 {{
-    font-size: 64px;
-    line-height: 1.08;
-    margin-top: 24px;
-    color: {COLOR_DARK};
+    font-family: "Roboto Slab", "Roboto", serif;
     font-weight: 900;
-    letter-spacing: -1.5px;
-    max-width: 920px;
+    font-size: 64px;
+    line-height: 1.0;
+    letter-spacing: 1px;
+    color: {COLOR_BLACK};
+    text-transform: uppercase;
+    text-align: center;
+    z-index: 2;
+    max-width: 900px;
+    text-shadow: 0 2px 6px rgba(255,255,255,0.4);
   }}
+  h1.long  {{ font-size: 50px; }}
+  h1.xlong {{ font-size: 42px; }}
   .tagline {{
-    font-size: 22px;
-    color: {COLOR_MUTED};
-    margin-top: 18px;
-    max-width: 720px;
+    font-style: italic;
+    font-size: 17px;
     line-height: 1.4;
+    color: {COLOR_BODY};
+    margin-top: 16px;
+    max-width: 760px;
+    z-index: 2;
   }}
-  .body-grid {{
+  .tagline strong {{ color: {COLOR_BLACK}; }}
+
+  /* ── Sections grid ── */
+  .sections {{
+    padding: 28px 60px 0;
     display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 50px;
-    margin-top: 50px;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px 50px;
   }}
-  .sections {{ display: flex; flex-direction: column; gap: 32px; }}
-  .section-head {{
-    font-size: 24px;
-    font-weight: 800;
-    color: {COLOR_PRIMARY};
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }}
-  .section-head::before {{
-    content: "";
+  .sec-head {{
+    font-size: 22px;
+    font-weight: 900;
+    color: {COLOR_BLACK};
+    margin-bottom: 10px;
     display: inline-block;
-    width: 6px;
-    height: 26px;
-    background: {COLOR_ACCENT};
-    border-radius: 3px;
+    border-bottom: 3px solid {COLOR_PRIMARY};
+    padding-bottom: 4px;
   }}
-  ul {{
+  ul.bullets {{
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
+    padding-left: 0;
   }}
-  li {{
-    font-size: 20px;
+  ul.bullets li {{
+    font-size: 14.5px;
     line-height: 1.4;
-    color: #1f2937;
-    padding-left: 26px;
+    color: {COLOR_BODY};
+    padding-left: 18px;
     position: relative;
+    text-align: justify;
   }}
-  li::before {{
-    content: "";
-    width: 8px; height: 8px;
-    background: {COLOR_ACCENT};
-    border-radius: 50%;
+  ul.bullets li::before {{
+    content: "•";
     position: absolute;
-    left: 0; top: 12px;
-  }}
-  .qr-card {{
-    background: white;
-    border-radius: 18px;
-    box-shadow: 0 8px 32px rgba(30,64,175,0.18);
-    padding: 24px;
-    text-align: center;
-    align-self: start;
-    border: 2px solid {COLOR_PRIMARY};
-  }}
-  .qr-card .apply {{
-    font-size: 22px;
-    font-weight: 800;
-    color: {COLOR_PRIMARY};
-    margin-bottom: 14px;
-    letter-spacing: 1px;
-  }}
-  .qr-card img.qr {{ width: 220px; height: 220px; display: block; margin: 0 auto; }}
-  .qr-card .qr-help {{
-    font-size: 13px;
-    color: #64748b;
-    margin-top: 12px;
-    line-height: 1.35;
-  }}
-  .meta {{
-    display: flex;
-    gap: 50px;
-    margin-top: 50px;
-    padding: 24px 32px;
-    background: rgba(255,255,255,0.7);
-    border-radius: 14px;
-    border-left: 6px solid {COLOR_PRIMARY};
-  }}
-  .meta-item .label {{
-    font-size: 13px;
-    color: #64748b;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }}
-  .meta-item .value {{
-    font-size: 19px;
-    color: {COLOR_DARK};
-    font-weight: 700;
-    margin-top: 4px;
-  }}
-  .footer {{
-    position: absolute;
-    bottom: 50px;
-    left: 70px;
-    right: 70px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }}
-  .footer img.logo {{ height: 56px; }}
-  .footer .contact {{
-    font-size: 16px;
-    color: {COLOR_MUTED};
-    text-align: right;
-    line-height: 1.5;
-  }}
-  .footer .contact strong {{ color: {COLOR_PRIMARY}; }}
-  .no-logo-text {{
-    font-size: 28px;
+    left: 0;
+    top: 0;
+    color: {COLOR_BLACK};
     font-weight: 900;
-    color: {COLOR_PRIMARY};
-    letter-spacing: -0.5px;
+    font-size: 18px;
   }}
+  ul.bullets li.placeholder {{ color: #9ca3af; }}
+
+  /* ── Apply Now + QR row ── */
+  .apply-row {{
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 70px;
+  }}
+  .meta-left, .meta-right {{
+    flex: 1;
+    font-size: 18px;
+    line-height: 1.3;
+  }}
+  .meta-left  {{ text-align: left;  }}
+  .meta-right {{ text-align: right; }}
+  .meta-label {{
+    color: {COLOR_RED};
+    font-weight: 900;
+  }}
+  .meta-value {{
+    color: {COLOR_BLACK};
+    font-weight: 700;
+  }}
+  .apply-block {{
+    text-align: center;
+    flex: 0 0 auto;
+  }}
+  .apply-cursive {{
+    font-family: "Great Vibes", cursive;
+    font-size: 48px;
+    color: {COLOR_PRIMARY};
+    line-height: 1;
+    margin-bottom: 6px;
+  }}
+  .qr {{
+    width: 130px;
+    height: 130px;
+    display: block;
+    margin: 0 auto;
+  }}
+  .scan-hint {{
+    font-size: 11px;
+    color: {COLOR_BODY};
+    margin-top: 6px;
+  }}
+  .scan-hint .underline {{
+    color: {COLOR_PRIMARY};
+    text-decoration: underline;
+    font-weight: 700;
+  }}
+
+  /* ── Bottom bar ── */
+  .bottom-bar {{
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 70px;
+    background: linear-gradient(90deg, {COLOR_DEEP} 0%, {COLOR_PRIMARY} 60%, {COLOR_ACCENT} 100%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 30px;
+  }}
+  .logo-bottom      {{ height: 42px; }}
+  .logo-bottom-text {{ color: white; font-weight: 900; font-size: 20px; }}
 </style></head>
 <body>
-  <span class="hiring-pill">We're Hiring</span>
-  <h1>{e(job_title)}</h1>
-  {f'<p class="tagline">{e(tagline)}</p>' if tagline else ""}
+  <div class="hero">
+    {logo_top_html}
+    <div class="hiring">HIRING</div>
+    <h1 class="{
+      'xlong' if len(job_title) > 28 else ('long' if len(job_title) > 18 else '')
+    }">{e(job_title.upper())}</h1>
+    {f'<div class="tagline">{e(tagline)}</div>' if tagline else ""}
+  </div>
 
-  <div class="body-grid">
-    <div class="sections">
-      <div>
-        <div class="section-head">What you'll do</div>
-        <ul>{do_li}</ul>
-      </div>
-      <div>
-        <div class="section-head">Candidate profile</div>
-        <ul>{profile_li}</ul>
-      </div>
+  <div class="sections">
+    <div>
+      <div class="sec-head">Key Responsibilities</div>
+      <ul class="bullets">{li_block(responsibilities)}</ul>
     </div>
+    <div>
+      <div class="sec-head">Requirements</div>
+      <ul class="bullets">{li_block(requirements)}</ul>
+    </div>
+    <div>
+      <div class="sec-head">Other Benefits &amp; Facilities</div>
+      <ul class="bullets">{li_block(benefits)}</ul>
+    </div>
+    <div>
+      <div class="sec-head">Required Skills &amp; Competencies</div>
+      <ul class="bullets">{li_block(skills)}</ul>
+    </div>
+  </div>
 
-    <div class="qr-card">
-      <div class="apply">APPLY NOW</div>
+  <div class="apply-row">
+    <div class="meta-left">
+      <span class="meta-label">Location:</span>
+      <span class="meta-value">{e(location)}</span>
+    </div>
+    <div class="apply-block">
+      <div class="apply-cursive">Apply Now</div>
       <img class="qr" src="{qr_uri}" alt="QR">
-      <div class="qr-help">Scan to apply via WhatsApp</div>
+      <div class="scan-hint">Scan to <span class="underline">apply</span> or browse the link from caption.</div>
+    </div>
+    <div class="meta-right">
+      <span class="meta-label">Deadline:</span>
+      <span class="meta-value">{e(deadline)}</span>
     </div>
   </div>
 
-  <div class="meta">
-    <div class="meta-item">
-      <div class="label">Salary</div>
-      <div class="value">{e(salary)}</div>
-    </div>
-    <div class="meta-item">
-      <div class="label">Location</div>
-      <div class="value">{e(location)}</div>
-    </div>
-    <div class="meta-item">
-      <div class="label">Deadline</div>
-      <div class="value">{e(deadline)}</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    {f'<img class="logo" src="{logo_uri}" alt="{e(company_name)}">'
-     if logo_uri else
-     f'<div class="no-logo-text">{e(company_name)}</div>'}
-    <div class="contact">
-      <strong>{e(contact_email)}</strong><br>
-      WhatsApp: {e(contact_whatsapp)}
-    </div>
+  <div class="bottom-bar">
+    {logo_bottom_html}
   </div>
 </body></html>"""
 
@@ -387,51 +489,57 @@ def generate_job_poster(
     company_name: str = "",
     requirements_text: str = "",
     responsibilities_text: str = "",
+    benefits_text: str = "",
+    skills_text: str = "",
     tagline: str = "",
-    salary: str = "Negotiable",
     location: str = "Dhaka, Bangladesh",
     deadline: str = "Open until filled",
-    contact_email: str = "career@talentracker.com.bd",
-    contact_whatsapp: str = "+880 1830 225234",
     output_path: str = "",
 ) -> str:
-    """Render a recruitment poster JPG and return its filesystem path.
+    """Render a square recruitment poster JPG and return its path.
 
-    No WhatsApp send happens here. The image is saved to disk under
-    outputs/job_posts/<slug>.jpg (or to `output_path` if given) so
-    the operator can open and post it manually.
+    No WhatsApp send. The image is saved to disk under
+    outputs/job_posts/<slug>.jpg (or `output_path` if given).
     """
     company = company_name or getattr(settings, "COMPANY_NAME", "Company")
 
-    # Extract bullet points.
-    do_bullets      = _bullets_from_text(responsibilities_text, max_bullets=5)
-    profile_bullets = _bullets_from_text(requirements_text,     max_bullets=5)
+    responsibilities = _bullets_from_text(responsibilities_text, max_bullets=5)
+    requirements     = _bullets_from_text(requirements_text,     max_bullets=5)
+    benefits         = _bullets_from_text(benefits_text,         max_bullets=4)
+    skills           = _bullets_from_text(skills_text,           max_bullets=4)
 
-    if not do_bullets:
-        do_bullets = ["See the full description in the message."]
-    if not profile_bullets:
-        profile_bullets = ["See the full description in the message."]
+    if not responsibilities:
+        responsibilities = ["See the full description in the message."]
+    if not requirements:
+        requirements = ["See the full description in the message."]
+    if not benefits:
+        benefits = ["Competitive compensation package",
+                    "Career growth opportunities",
+                    "Supportive work environment"]
+    if not skills:
+        skills = ["Strong communication and interpersonal skills",
+                  "Strategic thinking and problem-solving",
+                  "Team collaboration and leadership"]
 
-    # QR + logo data URIs.
     qr_uri   = _qr_data_uri(_whatsapp_apply_url(job_title))
     logo_uri = _logo_data_uri()
+    hero_uri = _hero_data_uri()
 
     html_doc = _build_html(
         job_title=job_title,
         tagline=tagline,
         company_name=company,
-        what_you_do=do_bullets,
-        candidate_profile=profile_bullets,
-        salary=salary,
+        responsibilities=responsibilities,
+        requirements=requirements,
+        benefits=benefits,
+        skills=skills,
         location=location,
         deadline=deadline,
-        contact_email=contact_email,
-        contact_whatsapp=contact_whatsapp,
         qr_uri=qr_uri,
         logo_uri=logo_uri,
+        hero_uri=hero_uri,
     )
 
-    # Output path.
     if not output_path:
         out_dir = os.path.join(settings.OUTPUT_DIR, "job_posts")
         os.makedirs(out_dir, exist_ok=True)
@@ -440,14 +548,15 @@ def generate_job_poster(
         output_path = os.path.join(out_dir, f"{safe}.jpg")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    # Render via headless Chromium. Capture the screenshot as bytes
-    # (no intermediate file) so Windows file-locking can't bite us.
-    # PNG bytes → Pillow → JPEG bytes → write final file once.
+    # Render headless. Wait for the network so Google Fonts load
+    # before the screenshot (the "Apply Now" script font depends
+    # on it).
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": W, "height": H})
-            page.set_content(html_doc, wait_until="load")
+            page.set_content(html_doc, wait_until="networkidle")
+            page.evaluate("document.fonts && document.fonts.ready")
             png_bytes = page.screenshot(type="png", full_page=False)
         finally:
             browser.close()

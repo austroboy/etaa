@@ -119,8 +119,9 @@ def create_job_post_task(self, params: dict, log_id: int, reply_jid: str = ""):
             company_name=company_info,
             requirements_text=qualifications,
             responsibilities_text=responsibilities,
+            benefits_text=params.get("benefits", ""),
+            skills_text=params.get("skills", ""),
             tagline=tagline,
-            salary=salary_range or "Negotiable",
             location=location,
             deadline=deadline,
         )

@@ -111,13 +111,24 @@ job_post:
   responsibilities: <string — copy the operator's full responsibilities
              section verbatim (bullets, multiple lines OK)>,
   qualifications: <string — copy the operator's full requirements/
-             qualifications section verbatim>,
+             qualifications section verbatim (these become the
+             "Requirements" column on the poster)>,
+  benefits: <string|"" — any benefits or facilities mentioned (salary
+             package, vehicle, allowance, etc.). One item per line.
+             If not stated, leave "" — the poster will fill with
+             sensible defaults.>,
+  skills: <string|"" — any specific skills / competencies mentioned
+             separately from the qualifications (e.g. "strong
+             communication", "Bangladesh market knowledge"). One item
+             per line. If not stated, leave "".>,
   salary_range: <string|"" — only if explicitly stated>,
   company_info: <string|"" — only if explicitly stated>,
-  tagline: <string|"" — a short one-line tagline for the poster
-             (e.g. "Driving business growth across modern trade"). If
-             the operator didn't supply one, leave "" and the system
-             will skip the tagline.>,
+  tagline: <string|"" — a short one-line tagline that introduces the
+             role. If the operator didn't supply one, INFER a brief
+             tagline from the role context (e.g. for an FMCG sales
+             manager: "A leading FMCG group is seeking a dynamic leader
+             to spearhead its modern trade strategy."). Keep it under
+             200 chars and make it scannable.>,
   location: <string default "Dhaka, Bangladesh" — only override if
              explicitly stated>,
   deadline: <string default "Open until filled" — only override if
