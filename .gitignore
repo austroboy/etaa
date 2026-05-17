@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+*.pot
+
+# Environment variables
+.env
+!.env.example
+
+# Node / WhatsApp Bridge
+bridge/node_modules/
+bridge/.wwebjs_auth/
+.wwebjs_auth/
+.wwebjs_cache/
+node_modules/
+
+# Generated outputs
+outputs/
+temp/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

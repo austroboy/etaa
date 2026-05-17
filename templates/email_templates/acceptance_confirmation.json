@@ -1,0 +1,6 @@
+{
+  "name": "acceptance_confirmation",
+  "keywords": ["accept", "confirm", "proceed", "agreed", "agreement", "confirmation"],
+  "subject": "Confirmation of Agreement – {{company_name}}",
+  "body": "<html><body style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;'><p>Dear {{recipient_name}},</p><p>We are delighted to confirm the acceptance of your agreement for:</p><div style='background: #f0fdf4; padding: 15px; border-left: 4px solid #16a34a; margin: 20px 0;'><p><strong>Service:</strong> {{offer_details}}</p><p><strong>Agreed Amount:</strong> BDT {{price}}</p>{% if deadline %}<p><strong>Commencement Date:</strong> {{deadline}}</p>{% endif %}</div><p>Our team will proceed accordingly and keep you informed of all developments. Please do not hesitate to reach out should you require any clarification.</p><p>Thank you for choosing {{company_name}}. We look forward to a successful collaboration.</p><p>Yours sincerely,<br><strong>{{sender_name}}</strong><br>{{company_name}}</p></body></html>"
+}

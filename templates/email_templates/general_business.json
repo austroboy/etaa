@@ -1,0 +1,6 @@
+{
+  "name": "general_business",
+  "keywords": ["general", "business", "letter", "correspondence", "message", "notify", "inform"],
+  "subject": "{{offer_details}} – {{company_name}}",
+  "body": "<html><body style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;'><p>Dear {{recipient_name}},</p><p>{{offer_details}}</p>{% if price %}<p><strong>Amount:</strong> BDT {{price}}</p>{% endif %}{% if deadline %}<p><strong>Date / Deadline:</strong> {{deadline}}</p>{% endif %}<p>Please do not hesitate to get in touch if you require any further information.</p><p>Kind regards,<br><strong>{{sender_name}}</strong><br>{{company_name}}</p></body></html>"
+}

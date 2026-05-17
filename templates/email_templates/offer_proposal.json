@@ -1,0 +1,6 @@
+{
+  "name": "offer_proposal",
+  "keywords": ["offer", "proposal", "quote", "pricing", "service", "bdt"],
+  "subject": "Service Proposal – {{offer_details}} | {{company_name}}",
+  "body": "<html><body style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;'><p>Dear {{recipient_name}},</p><p>Thank you for your interest in our services. We are pleased to present the following proposal:</p><div style='background: #f5f5f5; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0;'><p><strong>Service:</strong> {{offer_details}}</p><p><strong>Proposed Investment:</strong> BDT {{price}}</p>{% if deadline %}<p><strong>Offer Valid Until:</strong> {{deadline}}</p>{% endif %}</div><p>We are confident this proposal aligns with your requirements. Please feel free to reach out if you have any questions or would like to discuss further.</p><p>We look forward to the opportunity to work with you.</p><p>Warm regards,<br><strong>{{sender_name}}</strong><br>{{company_name}}</p></body></html>"
+}

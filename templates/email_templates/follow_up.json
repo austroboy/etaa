@@ -1,0 +1,6 @@
+{
+  "name": "follow_up",
+  "keywords": ["follow", "followup", "follow-up", "reminder", "checking in", "update"],
+  "subject": "Following Up – {{offer_details}} | {{company_name}}",
+  "body": "<html><body style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;'><p>Dear {{recipient_name}},</p><p>I hope this message finds you well. I am writing to follow up on our recent proposal regarding <strong>{{offer_details}}</strong>.</p><p>We understand that decisions of this nature take time, and we want to ensure you have everything you need to make an informed choice.</p>{% if deadline %}<p>Please note that our current offer is valid until <strong>{{deadline}}</strong>.</p>{% endif %}<p>Should you have any questions, require additional information, or wish to discuss adjustments to the proposal, please feel free to reply to this email or contact us directly.</p><p>We genuinely value the opportunity to serve {{recipient_name}} and look forward to your response.</p><p>Best regards,<br><strong>{{sender_name}}</strong><br>{{company_name}}</p></body></html>"
+}

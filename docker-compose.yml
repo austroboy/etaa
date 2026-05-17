@@ -1,0 +1,105 @@
+version: "3.9"
+
+# ============================================================
+# ETAA – Enterprise Task Automation Agent
+# Full stack: Django + Celery + Redis + WhatsApp Bridge
+# ============================================================
+
+services:
+
+  # ── Redis (message broker & result backend) ────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Django Web Server ──────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./media:/app/media
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn etaa_core.wsgi:application
+               --bind 0.0.0.0:8000
+               --workers 3
+               --timeout 120
+               --access-logfile -"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Celery Worker ──────────────────────────────────────────
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./outputs:/app/outputs
+      - ./media:/app/media
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    depends_on:
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    command: celery -A etaa_core worker --loglevel=info --concurrency=4 -Q celery
+
+  # ── Celery Beat (periodic tasks) ──────────────────────────
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A etaa_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  # ── WhatsApp Bridge (Node.js) ─────────────────────────────
+  wa_bridge:
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./.wwebjs_auth:/app/.wwebjs_auth
+    environment:
+      - WA_BRIDGE_PORT=3000
+      - DJANGO_WEBHOOK_URL=http://web:8000/api/messaging/webhook/
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  redis_data:
